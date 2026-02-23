@@ -88,6 +88,10 @@ table {
   margin-left: 0px;
 }
 
+#collection_dropdown .dropdown-menu {
+  min-width: 14rem;
+}
+
 /**
  * the back-to-top button
  */

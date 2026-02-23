@@ -359,14 +359,14 @@ function fetchSites() {
                     $.each(unifi_sites, function( index, value ) {
                         $('#site_dropdown > li > div').append('<a class="site_idx dropdown-item" id="' + value.site_id + '" data-site_id="' + value.site_id + '" href="#">' + value.site_full_name + '</a>');
                     });
-                }
 
-                /**
-                 * For official API controllers, also show the collections dropdown immediately
-                 * since some endpoints don't require a site.
-                 */
-                if (controller.type === 'official') {
-                    $('#collection_dropdown').removeClass('d-none');
+                    /**
+                     * Auto-select when there is only one site available
+                     */
+                    if (unifi_sites.length === 1) {
+                        $('.site_idx').first().click();
+                        return;
+                    }
                 }
 
                 /**
