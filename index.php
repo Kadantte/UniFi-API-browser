@@ -52,10 +52,16 @@ require_once 'common.php';
 
 /**
  * load the file containing the collections for the menu options
+ * the correct file is loaded based on the controller type stored in the session
  *
  * @var array $collections
  */
-require_once 'collections.php';
+$controller_type = $_SESSION['controller']['type'] ?? 'classic';
+if ($controller_type === 'official') {
+    require_once 'collections-official.php';
+} else {
+    require_once 'collections.php';
+}
 
 /**
  * initialize the Twig loader early on in case we need to render the error page
@@ -103,6 +109,7 @@ $twig->addGlobal('session', $_SESSION);
 $twig->addGlobal('navbar_class', $navbar_class);
 $twig->addGlobal('navbar_bg_class', $navbar_bg_class);
 $twig->addGlobal('about_modal_params', $about_modal_params);
+$twig->addGlobal('controller_type', $controller_type);
 
 /**
  * check whether the required PHP curl module is available, if not, stop and display an error message
@@ -130,13 +137,13 @@ if (!function_exists('curl_version')) {
  * check whether the minimum required PHP version (5.6.0) is met
  * - if not, stop and display an error message
  */
-if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+if (version_compare(PHP_VERSION, '8.1.0') < 0) {
     /**
      * render the config error page
      */
     try {
         echo $twig->render('config_error.html.twig', [
-            'error_message' => 'The current PHP version (' . PHP_VERSION . ') does not meet the minimum required version which is 5.6.0. Please upgrade before proceeding!<br>',
+            'error_message' => 'The current PHP version (' . PHP_VERSION . ') does not meet the minimum required version which is 8.1.0. Please upgrade before proceeding!<br>',
         ]);
     } catch (LoaderError $e) {
         error_log('Twig LoaderError: ' . $e->getMessage());

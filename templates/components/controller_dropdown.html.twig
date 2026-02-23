@@ -9,13 +9,42 @@
                         {% endif %}
                         </a>
                         <div class="dropdown-menu dropdown-menu-left scrollable-menu shadow" aria-labelledby="navbar_controller_dropdown_link">
-                            <h5 class="dropdown-header">Select a controller</h5>
 
+                    {% set has_classic = false %}
+                    {% set has_official = false %}
                     {% for item in controllers %}
-                            <a class="controller_idx dropdown-item{% if loop.index == controller.idx %} active{% endif %}" id="controller_{{loop.index}}" data-idx="{{loop.index}}" data-value="{{item.name}}" href="#">
+                        {% if (item.type ?? 'classic') == 'classic' %}
+                            {% set has_classic = true %}
+                        {% else %}
+                            {% set has_official = true %}
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if has_classic %}
+                            <h5 class="dropdown-header">Classic controllers</h5>
+                        {% for item in controllers %}
+                            {% if (item.type ?? 'classic') == 'classic' %}
+                            <a class="controller_idx dropdown-item{% if loop.index == controller.idx %} active{% endif %}" id="controller_{{loop.index}}" data-idx="{{loop.index}}" data-type="classic" data-value="{{item.name}}" href="#">
                                 {{item.name}}{% if loop.index == controller.idx %} <i class="fas fa-check fa-fw"></i>{% endif %}
                             </a>
-                    {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+
+                    {% if has_classic and has_official %}
+                            <div class="dropdown-divider"></div>
+                    {% endif %}
+
+                    {% if has_official %}
+                            <h5 class="dropdown-header">Official API controllers</h5>
+                        {% for item in controllers %}
+                            {% if (item.type ?? 'classic') == 'official' %}
+                            <a class="controller_idx dropdown-item{% if loop.index == controller.idx %} active{% endif %}" id="controller_{{loop.index}}" data-idx="{{loop.index}}" data-type="official" data-value="{{item.name}}" href="#">
+                                {{item.name}} <span class="badge badge-info badge-sm">API key</span>{% if loop.index == controller.idx %} <i class="fas fa-check fa-fw"></i>{% endif %}
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
 
                         </div>
                     </li>

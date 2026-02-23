@@ -24,6 +24,7 @@ use UniFi_API\Exceptions\InvalidSiteNameException;
 use UniFi_API\Exceptions\JsonDecodeException;
 use UniFi_API\Exceptions\LoginFailedException;
 use UniFi_API\Exceptions\LoginRequiredException;
+use ArtOfWiFi\UnifiNetworkApplicationApi\UnifiClient;
 
 /**
  * Load the configuration file if readable.
@@ -88,8 +89,11 @@ $results = [
 $output_method = 'json';
 
 if (!empty($_SESSION['controller'])) {
-    $method = '';
-    $params = [];
+    $method    = '';
+    $params    = [];
+    $site_id   = '';
+    $controller = $_SESSION['controller'];
+    $controller_type = $controller['type'] ?? 'classic';
 
     /**
      * POSTed object properties:
@@ -98,6 +102,10 @@ if (!empty($_SESSION['controller'])) {
      * selected_collection_key
      * selected_collection_params
      * selected_collection_group
+     * selected_collection_resource (official API only)
+     * controller_type
+     * response_mode (official API only: 'data_only' or 'full')
+     * fetch_all (official API only: '1' to fetch all pages)
      */
     error_log('fetching results for collection:' . $_POST['selected_collection_label']);
 
@@ -117,174 +125,294 @@ if (!empty($_SESSION['controller'])) {
         $output_method = $_POST['selected_output_method'];
     }
 
-    $gateway_stats_methods = [
-        'stat_5minutes_gateway',
-        'stat_hourly_gateway',
-        'stat_daily_gateway',
-        'stat_monthly_gateway',
-    ];
-
-    if (empty($params) && in_array($method, $gateway_stats_methods)) {
-        $params = [null, null, $gateway_stats_attribs];
-    }
-
-    if (!empty($method) && !empty($site_id)) {
-        $time_start = microtime(true);
-        $controller = $_SESSION['controller'];
-
+    if ($controller_type === 'official') {
         /**
-         * Create an instance of the Unifi API client class, log in to the controller and pull the requested data.
-         *
-         * @note the error *messages* are for consumption by the user, not for logging
+         * Official API path: use API key authentication via the Saloon-based client.
          */
-        try {
-            $unifi_connection = new ApiClient(
-                trim($controller['user']),
-                trim($controller['password']),
-                trim(rtrim($controller['url'], "/")),
-                $site_id
-            );
+        $resource_name = $_POST['selected_collection_resource'] ?? '';
+        $fetch_all     = !empty($_POST['fetch_all']);
+        $response_mode = $_POST['response_mode'] ?? 'data_only';
 
-            $unifi_connection->login();
-        } catch (CurlExtensionNotLoadedException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'cURL is not available in your PHP installation!';
-            return;
-        } catch (CurlGeneralErrorException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'We have encountered a general cURL error: ' . $e->getMessage();
-            return;
-        } catch (CurlTimeoutException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'UniFi controller connection timeout!';
-            return;
-        } catch (InvalidBaseUrlException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'UniFi controller login failure, base URL is invalid!';
-            return;
-        } catch (InvalidSiteNameException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'UniFi controller login failure, site name is invalid!';
-            return;
-        } catch (LoginFailedException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'UniFi controller login failure, please check your credentials in config/config.php!';
-            return;
-        } catch (Exception $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'An Exception was thrown:' . $e->getMessage();
-            return;
-        }
+        if (!empty($method) && !empty($resource_name)) {
+            $time_start = microtime(true);
 
-        /**
-         * We can safely continue.
-         */
-        $time_1           = microtime(true);
-        $time_after_login = $time_1 - $time_start;
+            try {
+                $client = new UnifiClient(
+                    trim(rtrim($controller['url'], '/')),
+                    trim($controller['api_key']),
+                    $controller['verify_ssl'] ?? true,
+                );
 
-        /**
-         * We then determine which method is required and which parameters to pass.
-         *
-         * @see https://stackoverflow.com/questions/1005857/how-to-call-a-function-from-a-string-stored-in-a-variable
-         * @note the error *messages* are for consumption by the user, not for logging
-         */
-        try {
-            if (count($params) === 0) {
-                $request_results = $unifi_connection->{$method}();
-            } else {
-                $request_results = $unifi_connection->{$method}(...$params);
-            }
-        } catch (JsonDecodeException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'JSON decode error!';
-            return;
-        } catch (LoginRequiredException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'Login is required for this endpoint';
-            return;
-        } catch (LoginFailedException $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'UniFi controller login failure, please check your credentials in config/config.php!';
-            return;
-        } catch (Exception $e) {
-            error_log(get_class($e) . ': ' . $e->getMessage());
-            $results['state']   = 'error';
-            $results['message'] = 'An Exception was thrown:' . $e->getMessage();
-            return;
-        }
-
-        if (!empty($request_results)) {
-            /**
-             * Count the array items and inject $data_array into $results.
-             */
-            if (is_array($request_results)) {
-                $results['count'] = count($request_results);
-            }
-
-            /**
-             * For results returned from API v2, the $request_results are an object, and we need to check for the
-             * 'data' property and count items in that array.
-             */
-            if (is_object($request_results) && property_exists($request_results, 'data',)) {
-                $results['count'] = count($request_results->data);
-            }
-
-            if ($debug) {
-                error_log('DEBUG: ' . $results['count'] . ' objects collected');
-            }
-
-            if ($output_method === 'kint') {
                 /**
-                 * For Kint, we need to return the results in a slightly different manner.
-                 *
-                 * @note using Rich render mode
+                 * Set site ID if provided and the endpoint needs it.
                  */
-                Kint::$display_called_from = false;
-                RichRenderer::$folder      = false;
-                $results['data']           = @d($request_results);
-            } else {
-                if ($output_method === 'kint_plain') {
+                if (!empty($site_id)) {
+                    $client->setSiteId($site_id);
+                }
+
+                $resource = $client->{$resource_name}();
+
+                if ($fetch_all) {
                     /**
-                     * @note using Plain render mode
+                     * Paginate through all pages and merge results.
+                     */
+                    $all_data = [];
+                    $offset   = 0;
+                    $limit    = 200;
+                    do {
+                        $response = $resource->{$method}(offset: $offset, limit: $limit);
+                        $json     = $response->json();
+                        $page_data = $json['data'] ?? [];
+                        $all_data  = array_merge($all_data, $page_data);
+                        $total     = $json['totalCount'] ?? $json['total'] ?? count($page_data);
+                        $offset   += $limit;
+                    } while ($offset < $total && !empty($page_data));
+
+                    $request_results      = $all_data;
+                    $results['count']     = count($all_data);
+                    $results['pagination'] = ['total' => $total, 'fetched_all' => true];
+                } else {
+                    $response = $resource->{$method}();
+                    $json     = $response->json();
+
+                    if ($response_mode === 'full') {
+                        $request_results  = $json;
+                        $results['count'] = $json['count'] ?? (is_array($json['data'] ?? null) ? count($json['data']) : 1);
+                    } else {
+                        $request_results  = $json['data'] ?? $json;
+                        $results['count'] = is_array($request_results) ? count($request_results) : 1;
+                    }
+
+                    /**
+                     * Pass pagination metadata to JS for display.
+                     */
+                    if (isset($json['totalCount']) || isset($json['total'])) {
+                        $results['pagination'] = [
+                            'offset' => $json['offset'] ?? 0,
+                            'limit'  => $json['limit'] ?? 0,
+                            'count'  => $json['count'] ?? (is_array($json['data'] ?? null) ? count($json['data']) : 0),
+                            'total'  => $json['totalCount'] ?? $json['total'] ?? 0,
+                        ];
+                    }
+                }
+
+                if (!empty($request_results)) {
+                    if ($output_method === 'kint') {
+                        Kint::$display_called_from = false;
+                        RichRenderer::$folder      = false;
+                        $results['data']           = @d($request_results);
+                    } elseif ($output_method === 'kint_plain') {
+                        Kint::$display_called_from = false;
+                        RichRenderer::$folder      = false;
+                        TextRenderer::$decorations = false;
+                        $results['data']           = @s($request_results);
+                    } else {
+                        $results['data'] = $request_results;
+                    }
+                }
+            } catch (\Saloon\Exceptions\Request\ClientException $e) {
+                error_log('ClientException: ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'Official API client error: ' . $e->getMessage();
+            } catch (\Saloon\Exceptions\Request\ServerException $e) {
+                error_log('ServerException: ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'Official API server error: ' . $e->getMessage();
+            } catch (\Saloon\Exceptions\Request\FatalRequestException $e) {
+                error_log('FatalRequestException: ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'Official API connection error: ' . $e->getMessage();
+            } catch (\RuntimeException $e) {
+                error_log('RuntimeException: ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = $e->getMessage();
+            } catch (\Exception $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'An Exception was thrown: ' . $e->getMessage();
+            }
+
+            /**
+             * Official API has no login step — timing is request only.
+             */
+            $time_end = microtime(true);
+            $results['timings']['login']      = 0;
+            $results['timings']['load']       = $time_end - $time_start;
+            $results['timings']['login_perc'] = 0;
+            $results['timings']['load_perc']  = 100;
+        }
+    } else {
+        /**
+         * Classic API path: use username/password authentication via the cURL-based client.
+         */
+        $gateway_stats_methods = [
+            'stat_5minutes_gateway',
+            'stat_hourly_gateway',
+            'stat_daily_gateway',
+            'stat_monthly_gateway',
+        ];
+
+        if (empty($params) && in_array($method, $gateway_stats_methods)) {
+            $params = [null, null, $gateway_stats_attribs];
+        }
+
+        if (!empty($method) && !empty($site_id)) {
+            $time_start = microtime(true);
+
+            /**
+             * Create an instance of the Unifi API client class, log in to the controller and pull the requested data.
+             *
+             * @note the error *messages* are for consumption by the user, not for logging
+             */
+            try {
+                $unifi_connection = new ApiClient(
+                    trim($controller['user']),
+                    trim($controller['password']),
+                    trim(rtrim($controller['url'], "/")),
+                    $site_id
+                );
+
+                $unifi_connection->login();
+            } catch (CurlExtensionNotLoadedException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'cURL is not available in your PHP installation!';
+                return;
+            } catch (CurlGeneralErrorException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'We have encountered a general cURL error: ' . $e->getMessage();
+                return;
+            } catch (CurlTimeoutException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'UniFi controller connection timeout!';
+                return;
+            } catch (InvalidBaseUrlException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'UniFi controller login failure, base URL is invalid!';
+                return;
+            } catch (InvalidSiteNameException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'UniFi controller login failure, site name is invalid!';
+                return;
+            } catch (LoginFailedException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'UniFi controller login failure, please check your credentials in config/config.php!';
+                return;
+            } catch (Exception $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'An Exception was thrown:' . $e->getMessage();
+                return;
+            }
+
+            /**
+             * We can safely continue.
+             */
+            $time_1           = microtime(true);
+            $time_after_login = $time_1 - $time_start;
+
+            /**
+             * We then determine which method is required and which parameters to pass.
+             *
+             * @see https://stackoverflow.com/questions/1005857/how-to-call-a-function-from-a-string-stored-in-a-variable
+             * @note the error *messages* are for consumption by the user, not for logging
+             */
+            try {
+                if (count($params) === 0) {
+                    $request_results = $unifi_connection->{$method}();
+                } else {
+                    $request_results = $unifi_connection->{$method}(...$params);
+                }
+            } catch (JsonDecodeException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'JSON decode error!';
+                return;
+            } catch (LoginRequiredException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'Login is required for this endpoint';
+                return;
+            } catch (LoginFailedException $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'UniFi controller login failure, please check your credentials in config/config.php!';
+                return;
+            } catch (Exception $e) {
+                error_log(get_class($e) . ': ' . $e->getMessage());
+                $results['state']   = 'error';
+                $results['message'] = 'An Exception was thrown:' . $e->getMessage();
+                return;
+            }
+
+            if (!empty($request_results)) {
+                /**
+                 * Count the array items and inject $data_array into $results.
+                 */
+                if (is_array($request_results)) {
+                    $results['count'] = count($request_results);
+                }
+
+                /**
+                 * For results returned from API v2, the $request_results are an object, and we need to check for the
+                 * 'data' property and count items in that array.
+                 */
+                if (is_object($request_results) && property_exists($request_results, 'data',)) {
+                    $results['count'] = count($request_results->data);
+                }
+
+                if ($debug) {
+                    error_log('DEBUG: ' . $results['count'] . ' objects collected');
+                }
+
+                if ($output_method === 'kint') {
+                    /**
+                     * For Kint, we need to return the results in a slightly different manner.
+                     *
+                     * @note using Rich render mode
                      */
                     Kint::$display_called_from = false;
                     RichRenderer::$folder      = false;
-                    TextRenderer::$decorations = false;
-                    $results['data']           = @s($request_results);
+                    $results['data']           = @d($request_results);
                 } else {
-                    $results['data'] = $request_results;
+                    if ($output_method === 'kint_plain') {
+                        /**
+                         * @note using Plain render mode
+                         */
+                        Kint::$display_called_from = false;
+                        RichRenderer::$folder      = false;
+                        TextRenderer::$decorations = false;
+                        $results['data']           = @s($request_results);
+                    } else {
+                        $results['data'] = $request_results;
+                    }
                 }
             }
+
+            /**
+             * Execute timing of data collection from UniFi controller.
+             */
+            $time_2          = microtime(true);
+            $time_after_load = $time_2 - $time_start;
+
+            /**
+             * Calculate all the timings/percentages.
+             */
+            $time_end         = microtime(true);
+            $time_total       = $time_end - $time_start;
+            $login_percentage = ($time_after_login / $time_total) * 100;
+            $load_percentage  = (($time_after_load - $time_after_login) / $time_total) * 100;
+
+            $results['timings']['login']      = $time_after_login;
+            $results['timings']['load']       = $time_after_load;
+            $results['timings']['login_perc'] = $login_percentage;
+            $results['timings']['load_perc']  = $load_percentage;
         }
-
-        /**
-         * Execute timing of data collection from UniFi controller.
-         */
-        $time_2          = microtime(true);
-        $time_after_load = $time_2 - $time_start;
-
-        /**
-         * Calculate all the timings/percentages.
-         */
-        $time_end         = microtime(true);
-        $time_total       = $time_end - $time_start;
-        $login_percentage = ($time_after_login / $time_total) * 100;
-        $load_percentage  = (($time_after_load - $time_after_login) / $time_total) * 100;
-
-        $results['timings']['login']      = $time_after_login;
-        $results['timings']['load']       = $time_after_load;
-        $results['timings']['login_perc'] = $login_percentage;
-        $results['timings']['load_perc']  = $load_percentage;
     }
 }
 

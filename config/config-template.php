@@ -17,22 +17,34 @@
  * The number of UniFi controllers that can be added is unlimited, just take care to correctly maintain
  * the array structure by following the PHP syntax shown below.
  *
- * **All fields are required for each controller**
+ * Controller types
+ * ================
+ * Two types of controllers are supported:
+ * - 'classic' (default): uses username/password authentication with the classic UniFi API client
+ * - 'official': uses API key authentication with the official UniFi Network Application API client
  *
- * If a controller configuration is incomplete, an error will the thrown upon selection
+ * If the 'type' field is omitted, it defaults to 'classic' for backward compatibility.
  */
 $controllers = [
+    /**
+     * Classic controller example (username/password, legacy API client)
+     */
     [
         'user'     => 'demo',                    // Username for access to the UniFi Controller
         'password' => 'demo',                    // Password for access to the UniFi Controller
         'url'      => 'https://demo.ui.com:443', // Full URL to the UniFi Controller, e.g., 'https://22.22.11.11:8443'
         'name'     => 'demo.ubnt.com',           // Name for this controller which will be used in the dropdown menu
+        'type'     => 'classic',                 // Controller type: 'classic' or 'official' (defaults to 'classic')
     ],
+    /**
+     * Official API controller example (API key, new Saloon-based API client)
+     */
     [
-        'user'     => 'demo2',                   // Username for access to the UniFi Controller
-        'password' => 'demo2',                   // Password for access to the UniFi Controller
-        'url'      => 'https://demo.ui.com:443', // Full URL to the UniFi Controller, e.g., 'https://22.22.11.11:8443'
-        'name'     => 'demo2.ubnt.com',          // Name for this controller which will be used in the dropdown menu
+        'api_key'    => 'your-api-key-here',       // API key for the official UniFi Network Application API
+        'url'        => 'https://192.168.1.1',     // Full URL to the UniFi Network Application
+        'name'       => 'Office (Official API)',   // Name for this controller which will be used in the dropdown menu
+        'type'       => 'official',                // Controller type: must be 'official' for API key authentication
+        'verify_ssl' => false,                     // Optional: set to false to disable SSL verification (default: true)
     ],
 ];
 

@@ -41,8 +41,9 @@ $results = [
  * Get the POST parameters that were passed by the calling AJAX function.
  */
 if (!empty($_POST['new_controller_idx'])) {
-    $_SESSION['controller']        = $controllers[($_POST['new_controller_idx'] - 1)];
-    $_SESSION['controller']['idx'] = $_POST['new_controller_idx'];
+    $_SESSION['controller']         = $controllers[($_POST['new_controller_idx'] - 1)];
+    $_SESSION['controller']['idx']  = $_POST['new_controller_idx'];
+    $_SESSION['controller']['type'] = $_SESSION['controller']['type'] ?? 'classic';
 
     /**
      * We also unset the cookie for access to the UniFi controller.

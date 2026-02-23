@@ -34,15 +34,23 @@ $results = [
     'controller_url'     => 'unknown',
     'controller_user'    => 'unknown',
     'controller_version' => 'not detected',
-    'memory_used'        => $_SESSION['memory_used'],
+    'controller_type'    => 'classic',
+    'memory_used'        => $_SESSION['memory_used'] ?? 'unknown',
 ];
 
 /**
  * Fill in the details for the controller, if available.
  */
 if (!empty($_SESSION['controller'])) {
+    $controller_type = $_SESSION['controller']['type'] ?? 'classic';
     $results['controller_url']  = $_SESSION['controller']['url'];
-    $results['controller_user'] = $_SESSION['controller']['user'];
+    $results['controller_type'] = $controller_type;
+
+    if ($controller_type === 'official') {
+        $results['controller_user'] = 'API Key';
+    } else {
+        $results['controller_user'] = $_SESSION['controller']['user'];
+    }
 
     if (!empty($_SESSION['controller']['detected_version'])) {
         $results['controller_version'] = $_SESSION['controller']['detected_version'];

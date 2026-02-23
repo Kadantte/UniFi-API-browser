@@ -9,8 +9,9 @@
 require_once 'vendor/autoload.php';
 
 use UniFi_API\Client as ApiClient;
+use ArtOfWiFi\UnifiNetworkApplicationApi\UnifiConnector;
 
-const TOOL_VERSION = '2.0.36';
+const TOOL_VERSION = '2.1.0';
 
 /**
  * Gather some basic information for the About modal.
@@ -22,18 +23,19 @@ $unknown_string = 'unknown';
  * Create the array to pass on to the twig templates.
  */
 $about_modal_params = [
-    'os_version'          => php_uname('s') . ' ' . php_uname('r'),
-    'php_version'         => phpversion(),
-    'memory_limit'        => ini_get('memory_limit') . 'B',
-    'memory_used'         => round(memory_get_peak_usage() / 1024 / 1024, 2) . 'MB',
-    'curl_version'        => $curl_info['version'],
-    'openssl_version'     => $curl_info['ssl_version'],
-    'api_client_version'  => getClientVersion(),
-    'api_browser_version' => TOOL_VERSION,
+    'os_version'                   => php_uname('s') . ' ' . php_uname('r'),
+    'php_version'                  => phpversion(),
+    'memory_limit'                 => ini_get('memory_limit') . 'B',
+    'memory_used'                  => round(memory_get_peak_usage() / 1024 / 1024, 2) . 'MB',
+    'curl_version'                 => $curl_info['version'],
+    'openssl_version'              => $curl_info['ssl_version'],
+    'api_client_version'           => getClientVersion(),
+    'official_api_client_version'  => getOfficialClientVersion(),
+    'api_browser_version'          => TOOL_VERSION,
 ];
 
 /**
- * The version of the included API client class.
+ * The version of the included classic API client class.
  *
  * @return string
  */
@@ -41,6 +43,16 @@ function getClientVersion(): string
 {
     $unifi_connection = new ApiClient('user', 'password');
     return $unifi_connection->get_class_version();
+}
+
+/**
+ * The version of the included official API client class.
+ *
+ * @return string
+ */
+function getOfficialClientVersion(): string
+{
+    return UnifiConnector::VERSION;
 }
 
 /**
@@ -54,4 +66,3 @@ function returnJson($results): void
     header('Content-Type: application/json; charset=utf-8');
     echo(json_encode($results));
 }
-

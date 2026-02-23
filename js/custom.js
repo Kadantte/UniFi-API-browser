@@ -11,13 +11,15 @@
 let controller = {
         idx:             '',
         full_name:       $('#navbar_controller_dropdown_link').text(),
-        config_complete: false
+        config_complete: false,
+        type:            window.controller_type || 'classic'
     },
     theme                  = 'bootstrap',
     unifi_sites            = [],
     selected_site          = {},
     selected_collection    = {},
-    selected_output_method = 'json';
+    selected_output_method = 'json',
+    selected_response_mode = 'data_only';
 
 /**
  * check whether user has stored a custom theme, if yes we switch to the stored value
@@ -42,13 +44,21 @@ $('.theme_option').on('click', function(){
  * catch and process the selection of a UniFi controller
  */
 $('.controller_idx').on('click', function(){
-    let new_controller_idx = $(this).data('idx');
+    let new_controller_idx  = $(this).data('idx');
+    let new_controller_type = $(this).data('type') || 'classic';
+
     if (!$(this).hasClass('active')) {
         /**
-         * update the current controller idx
+         * check if we're switching between controller types — if so, we need a page reload
+         */
+        let type_changed = (controller.type !== new_controller_type && controller.type !== '');
+
+        /**
+         * update the current controller idx and type
          */
         controller.idx       = new_controller_idx;
         controller.full_name = $(this).data('value');
+        controller.type      = new_controller_type;
 
         /**
          * clear the selected collection and the active options in the menu
@@ -90,6 +100,13 @@ $('.controller_idx').on('click', function(){
         $('.alert_wrapper').addClass('d-none');
 
         /**
+         * hide official API controls
+         */
+        $('#response_mode_buttons').addClass('d-none');
+        $('#fetch_all_button').addClass('d-none');
+        $('#pagination_info').addClass('d-none');
+
+        /**
          * restore the label for the site dropdown "button"
          */
         $('#navbar_site_dropdown_link').html('Sites');
@@ -106,9 +123,11 @@ $('.controller_idx').on('click', function(){
             },
             success:  function (json) {
                 /**
-                 * only if we are on the "select controller" page do we reload it
+                 * If we switched controller types, we need a page reload
+                 * so that the correct collections file is loaded server-side.
+                 * Otherwise, just fetch sites.
                  */
-                if ($('#select_controller_alert_wrapper').length > 0) {
+                if ($('#select_controller_alert_wrapper').length > 0 || type_changed) {
                     location.reload(true);
                 } else {
                     fetchSites();
@@ -168,11 +187,39 @@ $('#collection_dropdown').on('click', '.collection_idx', function(){
         $('[data-toggle="dropdown"]').removeClass('active');
         $(this).closest('.dropdown-submenu').find('[data-toggle="dropdown"]').eq(0).addClass('active');
 
-        selected_collection.method = $(this).data('method');
-        selected_collection.label  = $(this).text();
-        selected_collection.key    = $(this).data('key');
-        selected_collection.params = $(this).data('params');
-        selected_collection.group  = $(this).closest('.dropdown-submenu').find('[data-toggle="dropdown"]').eq(0).text();
+        selected_collection.method    = $(this).data('method');
+        selected_collection.label     = $(this).text();
+        selected_collection.key       = $(this).data('key');
+        selected_collection.params    = $(this).data('params');
+        selected_collection.group     = $(this).closest('.dropdown-submenu').find('[data-toggle="dropdown"]').eq(0).text();
+        selected_collection.resource  = $(this).data('resource') || '';
+        selected_collection.needsSite = $(this).data('needs-site');
+        selected_collection.paginated = $(this).data('paginated');
+
+        /**
+         * For official API, handle needs_site logic
+         */
+        if (controller.type === 'official') {
+            if (selected_collection.needsSite === 0 || selected_collection.needsSite === '0') {
+                /**
+                 * This endpoint doesn't need a site — proceed directly
+                 */
+                updateOfficialApiControls();
+                fetchCollection();
+                return;
+            }
+
+            /**
+             * This endpoint needs a site — check if one is selected
+             */
+            if (selected_site.id === undefined || selected_site.id === '') {
+                $('.alert_wrapper').addClass('d-none');
+                $('#select_site_alert_wrapper').removeClass('d-none');
+                return;
+            }
+
+            updateOfficialApiControls();
+        }
 
         fetchCollection();
     }
@@ -188,6 +235,37 @@ $('.output_radio_button').click(function() {
         fetchCollection();
     }
 });
+
+/**
+ * catch a response mode selection request (official API only)
+ */
+$('.response_mode_button').click(function() {
+    let button_value = $(this).find('input').attr('value');
+    if (button_value !== '') {
+        selected_response_mode = button_value;
+        fetchCollection();
+    }
+});
+
+/**
+ * catch "Fetch All Pages" button click (official API only)
+ */
+$('#fetch_all_button').on('click', function() {
+    fetchAllPages();
+});
+
+/**
+ * function to show/hide official API controls based on selected collection
+ */
+function updateOfficialApiControls() {
+    if (controller.type === 'official' && (selected_collection.paginated === 1 || selected_collection.paginated === '1')) {
+        $('#response_mode_buttons').removeClass('d-none');
+        $('#fetch_all_button').removeClass('d-none');
+    } else {
+        $('#response_mode_buttons').addClass('d-none');
+        $('#fetch_all_button').addClass('d-none');
+    }
+}
 
 /**
  * function to process the CSS switch
@@ -284,6 +362,14 @@ function fetchSites() {
                 }
 
                 /**
+                 * For official API controllers, also show the collections dropdown immediately
+                 * since some endpoints don't require a site.
+                 */
+                if (controller.type === 'official') {
+                    $('#collection_dropdown').removeClass('d-none');
+                }
+
+                /**
                  * we now update the About modal with the dynamic metrics
                  */
                 updateAboutModal();
@@ -327,6 +413,27 @@ function fetchDebugDetails() {
 }
 
 /**
+ * function to build the summary line for the results
+ */
+function buildSummaryLine() {
+    let params_string = JSON.stringify(selected_collection.params).slice(1,-1);
+    let site_part = selected_site.name || '(no site)';
+
+    if (controller.type === 'official') {
+        let api_call = selected_collection.resource + '()->' + selected_collection.method + '()';
+        return controller.full_name + ' <i class="fas fa-sm fa-chevron-right"></i> ' + site_part +
+            ' <i class="fas fa-sm fa-chevron-right"></i> ' +
+            selected_collection.group + ' <i class="fas fa-sm fa-chevron-right"></i> ' + selected_collection.label +
+            ' / API call: <code>' + api_call + '</code> / ';
+    } else {
+        return controller.full_name + ' <i class="fas fa-sm fa-chevron-right"></i> ' + selected_site.name +
+            ' <i class="fas fa-sm fa-chevron-right"></i> ' +
+            selected_collection.group + ' <i class="fas fa-sm fa-chevron-right"></i> ' + selected_collection.label +
+            ' / API function: <code>' + selected_collection.method + '(' + params_string + ')</code> / ';
+    }
+}
+
+/**
  * function to fetch a collection
  */
 function fetchCollection() {
@@ -339,17 +446,34 @@ function fetchCollection() {
 
     $('#output_pre').html('<div class="d-flex align-items-center justify-content-center h-100 m-2"><div class="d-flex flex-column m-2"><i class="fas fa-sync fa-spin fa-2x"></i></div></div>');
 
-    let params_string = JSON.stringify(selected_collection.params).slice(1,-1);
-
-    $('#results_summary_placeholder').html(
-        controller.full_name + ' <i class="fas fa-sm fa-chevron-right"></i> ' + selected_site.name + ' <i class="fas fa-sm fa-chevron-right"></i> ' +
-        selected_collection.group + ' <i class="fas fa-sm fa-chevron-right"></i> ' + selected_collection.label +
-        ' / API function: <code>' + selected_collection.method + '(' + params_string + ')</code> / '
-    );
+    $('#results_summary_placeholder').html(buildSummaryLine());
 
     $('#objects_count').html('<i class="fas fa-sync fa-spin"></i>');
     $('#results_stats_placeholder').html('');
+    $('#pagination_info').addClass('d-none').html('');
     $('.js-copy-trigger').show();
+
+    /**
+     * Build POST data
+     */
+    let post_data = {
+        selected_collection_method: selected_collection.method,
+        selected_collection_label:  selected_collection.label,
+        selected_collection_key:    selected_collection.key,
+        selected_collection_params: JSON.stringify(selected_collection.params),
+        selected_collection_group:  selected_collection.group,
+        selected_site_id:           selected_site.id || '',
+        selected_output_method:     selected_output_method,
+        controller_type:            controller.type
+    };
+
+    /**
+     * Add official API specific fields
+     */
+    if (controller.type === 'official') {
+        post_data.selected_collection_resource = selected_collection.resource;
+        post_data.response_mode = selected_response_mode;
+    }
 
     /**
      * then we fetch the collection using AJAX
@@ -358,15 +482,7 @@ function fetchCollection() {
         type:     'POST',
         url:      'ajax/fetch_collection.php',
         dataType: 'json',
-        data: {
-            selected_collection_method: selected_collection.method,
-            selected_collection_label:  selected_collection.label,
-            selected_collection_key:    selected_collection.key,
-            selected_collection_params: JSON.stringify(selected_collection.params),
-            selected_collection_group:  selected_collection.group,
-            selected_site_id:           selected_site.id,
-            selected_output_method:     selected_output_method
-        },
+        data:     post_data,
         success:  function (json) {
             if (json.state === 'success') {
                 /**
@@ -384,15 +500,30 @@ function fetchCollection() {
                     $('.js-copy-trigger').hide();
                 }
 
-                $('#results_stats_placeholder').html(
-                    'Total time: ' + (json.timings.load + json.timings.login) + ' seconds' +
-                    '<div class="progress">' +
-                        '<div class="progress-bar bg-warning" role="progressbar" style="width: ' + json.timings.login_perc +
-                            '%" aria-valuenow="' + json.timings.login_perc + ' aria-valuemin="0" aria-valuemax="100" data-toggle="tooltip" data-placement="top" title="API login and connect took ' + json.timings.login + ' seconds">API login</div>' +
-                        '<div class="progress-bar bg-success" role="progressbar" style="width: ' + json.timings.load_perc +
-                            '%" aria-valuenow="'  + json.timings.load_perc + '" aria-valuemin="0" aria-valuemax="100" data-toggle="tooltip" data-placement="top" title="Data transfer took ' + json.timings.load + ' seconds">data transfer</div>' +
-                    '</div>'
-                )
+                /**
+                 * Display timing information
+                 */
+                if (controller.type === 'official') {
+                    $('#results_stats_placeholder').html(
+                        'Total time: ' + json.timings.load.toFixed(4) + ' seconds' +
+                        '<div class="progress">' +
+                            '<div class="progress-bar bg-success" role="progressbar" style="width: 100%" ' +
+                                'aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" ' +
+                                'data-toggle="tooltip" data-placement="top" ' +
+                                'title="Data transfer took ' + json.timings.load.toFixed(4) + ' seconds">data transfer</div>' +
+                        '</div>'
+                    );
+                } else {
+                    $('#results_stats_placeholder').html(
+                        'Total time: ' + (json.timings.load + json.timings.login) + ' seconds' +
+                        '<div class="progress">' +
+                            '<div class="progress-bar bg-warning" role="progressbar" style="width: ' + json.timings.login_perc +
+                                '%" aria-valuenow="' + json.timings.login_perc + ' aria-valuemin="0" aria-valuemax="100" data-toggle="tooltip" data-placement="top" title="API login and connect took ' + json.timings.login + ' seconds">API login</div>' +
+                            '<div class="progress-bar bg-success" role="progressbar" style="width: ' + json.timings.load_perc +
+                                '%" aria-valuenow="'  + json.timings.load_perc + '" aria-valuemin="0" aria-valuemax="100" data-toggle="tooltip" data-placement="top" title="Data transfer took ' + json.timings.load + ' seconds">data transfer</div>' +
+                        '</div>'
+                    )
+                }
 
                 /**
                  * to ensure the tooltips on the freshly rendered progress bar are available
@@ -405,8 +536,111 @@ function fetchCollection() {
                 $('#objects_count').html(json.count);
 
                 /**
+                 * show pagination info for official API
+                 */
+                if (json.pagination !== undefined && json.pagination !== null) {
+                    let pag = json.pagination;
+                    if (pag.fetched_all) {
+                        $('#pagination_info').removeClass('d-none').html(
+                            '<span class="badge badge-success">All ' + pag.total + ' items fetched</span>'
+                        );
+                    } else {
+                        $('#pagination_info').removeClass('d-none').html(
+                            '<span class="badge badge-info">Showing ' + pag.count + ' of ' + pag.total +
+                            ' items (offset: ' + pag.offset + ', limit: ' + pag.limit + ')</span>'
+                        );
+                    }
+                } else {
+                    $('#pagination_info').addClass('d-none');
+                }
+
+                /**
                  * we now update the About modal with the dynamic metrics
                  */
+                updateAboutModal();
+            } else {
+                console.error(json.message);
+                renderGeneralErrorAlert(json.message);
+            }
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error(jqXHR);
+        }
+    });
+}
+
+/**
+ * function to fetch all pages for the current collection (official API only)
+ */
+function fetchAllPages() {
+    /**
+     * show the output container
+     */
+    $('.alert_wrapper').addClass('d-none');
+    $('#output_container_outer_div').removeClass('d-none');
+    $('#output_buttons_container_outer_div').removeClass('d-none');
+
+    $('#output_pre').html('<div class="d-flex align-items-center justify-content-center h-100 m-2"><div class="d-flex flex-column m-2"><i class="fas fa-sync fa-spin fa-2x"></i><br><span>Fetching all pages...</span></div></div>');
+
+    $('#results_summary_placeholder').html(buildSummaryLine());
+
+    $('#objects_count').html('<i class="fas fa-sync fa-spin"></i>');
+    $('#results_stats_placeholder').html('');
+    $('#pagination_info').addClass('d-none').html('');
+    $('.js-copy-trigger').show();
+
+    let post_data = {
+        selected_collection_method:   selected_collection.method,
+        selected_collection_label:    selected_collection.label,
+        selected_collection_key:      selected_collection.key,
+        selected_collection_params:   JSON.stringify(selected_collection.params),
+        selected_collection_group:    selected_collection.group,
+        selected_collection_resource: selected_collection.resource,
+        selected_site_id:             selected_site.id || '',
+        selected_output_method:       selected_output_method,
+        controller_type:              controller.type,
+        response_mode:                'data_only',
+        fetch_all:                    '1'
+    };
+
+    $.ajax({
+        type:     'POST',
+        url:      'ajax/fetch_collection.php',
+        dataType: 'json',
+        data:     post_data,
+        success:  function (json) {
+            if (json.state === 'success') {
+                if (selected_output_method === 'json' || selected_output_method === 'json_highlighted') {
+                    var output = JSON.stringify(json.data, undefined, 4);
+                    $('#output_pre').html('<code id="copy_container" class="json js-copy-target">' + output + '</code>');
+
+                    if (selected_output_method === 'json_highlighted') {
+                        hljs.highlightBlock(document.getElementById('output_pre'));
+                    }
+                } else if (selected_output_method === 'kint' || selected_output_method === 'kint_plain') {
+                    $('#output_pre').html('<div class="p-3">' + json.data + '</div>');
+                    $('.js-copy-trigger').hide();
+                }
+
+                $('#results_stats_placeholder').html(
+                    'Total time: ' + json.timings.load.toFixed(4) + ' seconds' +
+                    '<div class="progress">' +
+                        '<div class="progress-bar bg-success" role="progressbar" style="width: 100%" ' +
+                            'aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" ' +
+                            'data-toggle="tooltip" data-placement="top" ' +
+                            'title="Data transfer took ' + json.timings.load.toFixed(4) + ' seconds">data transfer</div>' +
+                    '</div>'
+                );
+
+                $('[data-toggle="tooltip"]').tooltip();
+                $('#objects_count').html(json.count);
+
+                if (json.pagination !== undefined && json.pagination !== null) {
+                    $('#pagination_info').removeClass('d-none').html(
+                        '<span class="badge badge-success">All ' + json.pagination.total + ' items fetched</span>'
+                    );
+                }
+
                 updateAboutModal();
             } else {
                 console.error(json.message);
@@ -451,6 +685,15 @@ function updateAboutModal() {
             $('#span_controller_user').html(json.controller_user);
             $('#span_controller_version').html(json.controller_version);
             $('#span_memory_used').html(json.memory_used);
+
+            /**
+             * Update the auth label based on controller type
+             */
+            if (json.controller_type === 'official') {
+                $('#controller_auth_label').html('Auth method');
+            } else {
+                $('#controller_auth_label').html('Controller user name');
+            }
         },
         error: function(jqXHR, textStatus, errorThrown) {
             console.error(jqXHR);

@@ -28,6 +28,7 @@
         <script type='text/javascript' >
             window.debug               = {{debug | default('false')}};
             window.api_browser_version = '{{tool_version}}';
+            window.controller_type     = '{{controller_type | default("classic")}}';
         </script>
     </head>
     {% endblock %}

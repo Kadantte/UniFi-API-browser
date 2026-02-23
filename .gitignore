@@ -16,3 +16,8 @@ Thumbs.db
 
 # ignore Work in Progress files
 RECOMMENDATIONS.md
+
+# ignore Claude files
+CLAUDE.md
+CLAUDE-*.md
+.claude/

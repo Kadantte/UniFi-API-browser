@@ -27,7 +27,12 @@
                 </div>
                 <div class="row">
                     <div class="col-sm-8 offset-sm-2">
-                        <a href="https://github.com/Art-of-WiFi/UniFi-API-client" target="_blank">UniFi API client on Github</a>
+                        <a href="https://github.com/Art-of-WiFi/UniFi-API-client" target="_blank">UniFi API client (classic) on Github</a>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-8 offset-sm-2">
+                        <a href="https://github.com/Art-of-WiFi/UniFi-Network-Application-API-client" target="_blank">UniFi Network Application API client (official) on Github</a>
                     </div>
                 </div>
 
@@ -39,17 +44,21 @@
                             &nbsp;<i class="fas fa-spinner fa-spin fa-fw"></i> checking for updates
                         </span>
                     </dd>
-                    <dt class="col-5 text-right">PHP API client version</dt>
+                    <dt class="col-5 text-right">Classic API client version</dt>
                     <dd class="col-7"><span id="span_api_client_version" class="badge badge-primary">{{about_modal_params.api_client_version | default('unknown')}}</span></dd>
+                    <dt class="col-5 text-right">Official API client version</dt>
+                    <dd class="col-7"><span id="span_official_api_client_version" class="badge badge-primary">{{about_modal_params.official_api_client_version | default('unknown')}}</span></dd>
                 </dl>
                 <hr>
                 <dl class="row">
                     <dt class="col-5 text-right">Controller URL</dt>
                     <dd class="col-7"><span id="span_controller_url" class="badge badge-primary">{{controller.url | default('unknown')}}</span></dd>
-                    <dt class="col-5 text-right">Controller user name</dt>
+                    <dt class="col-5 text-right" id="controller_auth_label">Controller user name</dt>
                     <dd class="col-7"><span id="span_controller_user" class="badge badge-primary">{{controller.user | default('unknown')}}</span></dd>
                     <dt class="col-5 text-right">Controller version</dt>
                     <dd class="col-7"><span id="span_controller_version" class="badge badge-primary">{{controller.detected_version | default('not detected')}}</span></dd>
+                    <dt class="col-5 text-right">Controller type</dt>
+                    <dd class="col-7"><span id="span_controller_type" class="badge badge-primary">{{controller_type | default('classic')}}</span></dd>
                 </dl>
                 <hr>
                 <dl class="row">
