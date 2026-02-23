@@ -223,8 +223,8 @@ Docker-based installs.
 
 #### Official API controller example
 
-To use the official API, you need to generate an API key in the UniFi Network Application settings
-(Settings > System > Advanced > API). Then add a controller entry like this:
+To use the official API, you need to generate an API key in the UniFi Network Application (Settings > ) API section.
+Then add a controller entry in the `config.php` like this:
 
 ```php
 [
@@ -376,6 +376,10 @@ The controller selection dropdown menu:
 
 ![Controller selection](https://user-images.githubusercontent.com/12016131/67584184-59a46800-f74d-11e9-88b4-36e333f388a1.png "Controller selection")
 
+Now with different controller types:
+
+
+
 The site selection dropdown menu:
 
 ![Site selection](https://user-images.githubusercontent.com/12016131/67584192-5d37ef00-f74d-11e9-906d-69c11f046037.png "Site selection")
@@ -391,6 +395,14 @@ Showing the site settings collection in JSON format:
 Showing the site settings collection in interactive PHP format:
 
 ![Site settings in PHP format](https://user-images.githubusercontent.com/12016131/67584232-704abf00-f74d-11e9-9907-a1cadd00bf1b.png "Interactive PHP format")
+
+Showing a collection from the Official API (initial page):
+
+
+
+Showing a collection from the Official API (all pages):
+
+
 
 The "About" modal:
 
